@@ -85,7 +85,7 @@
         <input type="file" id="videoInput" accept="video/*">
         <button id="analyseButton">Analyse starten</button>
 
-        <div id="loadingSpinner">Analysiere... bitte warten.</div>
+        <div id="loadingSpinner">Analysiere... bitte warten. (Der erste Start kann bis zu 60s dauern)</div>
         <div id="errorDisplay"></div>
 
         <div id="resultContainer" style="display: none;">
@@ -128,7 +128,8 @@
         const rueckenStatus = document.getElementById('rueckenStatus');
         const rueckenDetails = document.getElementById('rueckenDetails');
         
-        const API_URL = 'http://127.0.0.1:5001/analyse'; 
+        // HIER IST DIE ÄNDERUNG: Die URL zeigt jetzt auf Ihren Live-Server
+        const API_URL = 'https://ki-coach-backend.onrender.com/analyse'; 
 
         analyseButton.addEventListener('click', async () => {
             const file = videoInput.files[0];
@@ -137,7 +138,6 @@
                 return;
             }
 
-            // UI für Ladezustand zurücksetzen und anzeigen
             analyseButton.disabled = true;
             loadingSpinner.style.display = 'block';
             errorDisplay.style.display = 'none';
@@ -155,23 +155,20 @@
                     throw new Error(data.error || 'Ein unbekannter API-Fehler ist aufgetreten.');
                 }
 
-                // Lade-UI ausblenden und Ergebnisse anzeigen
                 loadingSpinner.style.display = 'none';
                 resultContainer.style.display = 'grid';
                 displayResults(data);
 
             } catch (error) {
-                showError(`Fehler: ${error.message}\nStelle sicher, dass der 'app.py' Server läuft.`);
+                showError(`Fehler: ${error.message}\nDer Server könnte gerade aufwachen, bitte versuchen Sie es in 30 Sekunden erneut.`);
             } finally {
                 analyseButton.disabled = false;
             }
         });
 
         function displayResults(data) {
-            // Rohes JSON für Debugging anzeigen
             rawJsonArea.textContent = JSON.stringify(data, null, 2);
 
-            // TIEFE-KARTE AKTUALISIEREN
             updateCard(tiefeCard, tiefeIcon, tiefeStatus, tiefeDetails, 
                 data.bewertung_tiefe, 
                 {
@@ -181,7 +178,6 @@
                 }
             );
             
-            // RÜCKEN-KARTE AKTUALISIEREN
             updateCard(rueckenCard, rueckenIcon, rueckenStatus, rueckenDetails,
                 data.bewertung_ruecken,
                 {
@@ -209,3 +205,5 @@
     </script>
 </body>
 </html>
+
+
