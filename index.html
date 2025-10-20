@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KI Coach MVP</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 600px;
+            margin: auto;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+        }
+        h2 { text-align: center; }
+        input[type="file"] {
+            display: block;
+            margin-bottom: 20px;
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        button {
+            background-color: #007aff;
+            color: white;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #aaa; cursor: not-allowed; }
+        
+        #resultContainer {
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .result-card {
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        .result-card .icon { font-size: 2.5em; }
+        .result-card .title { font-size: 1.1em; margin: 10px 0 5px; }
+        .result-card .status { font-size: 1.4em; font-weight: bold; margin: 0; }
+        .result-card .details { font-size: 0.9em; color: #666; margin-top: 10px; }
+
+        /* Status-Farben */
+        .status-good { background-color: #e8f5e9; border-color: #a5d6a7; color: #2e7d32; }
+        .status-bad { background-color: #ffebee; border-color: #ef9a9a; color: #c62828; }
+        .status-neutral { background-color: #f5f5f5; border-color: #e0e0e0; }
+        
+        #loadingSpinner { text-align: center; font-size: 1.2em; padding: 20px; display: none; }
+        #errorDisplay { color: #c62828; background-color: #ffebee; border: 1px solid #ef9a9a; padding: 15px; border-radius: 8px; margin-top: 20px; display: none; }
+        
+        details { margin-top: 20px; }
+        summary { cursor: pointer; font-weight: bold; }
+        pre { background-color: #eee; border: 1px solid #ddd; padding: 15px; border-radius: 8px; white-space: pre-wrap; word-wrap: break-word; font-size: 0.8em; }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>KI Form-Coach 🏋️</h2>
+        <p>Lade dein Kniebeugen-Video hoch, um eine detaillierte Analyse zu erhalten.</p>
+        
+        <input type="file" id="videoInput" accept="video/*">
+        <button id="analyseButton">Analyse starten</button>
+
+        <div id="loadingSpinner">Analysiere... bitte warten.</div>
+        <div id="errorDisplay"></div>
+
+        <div id="resultContainer" style="display: none;">
+            <div id="resultTiefeCard" class="result-card">
+                <div class="icon" id="tiefeIcon"></div>
+                <h4 class="title">Tiefe</h4>
+                <p class="status" id="tiefeStatus"></p>
+                <p class="details" id="tiefeDetails"></p>
+            </div>
+            <div id="resultRueckenCard" class="result-card">
+                <div class="icon" id="rueckenIcon"></div>
+                <h4 class="title">Rückenhaltung</h4>
+                <p class="status" id="rueckenStatus"></p>
+                <p class="details" id="rueckenDetails"></p>
+            </div>
+        </div>
+        
+        <details>
+            <summary>Technische Details anzeigen</summary>
+            <pre id="rawJsonArea">Wartet auf Analyse...</pre>
+        </details>
+    </div>
+
+    <script>
+        const videoInput = document.getElementById('videoInput');
+        const analyseButton = document.getElementById('analyseButton');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const errorDisplay = document.getElementById('errorDisplay');
+        const resultContainer = document.getElementById('resultContainer');
+        const rawJsonArea = document.getElementById('rawJsonArea');
+
+        // Ergebnis-Karten-Elemente
+        const tiefeCard = document.getElementById('resultTiefeCard');
+        const tiefeIcon = document.getElementById('tiefeIcon');
+        const tiefeStatus = document.getElementById('tiefeStatus');
+        const tiefeDetails = document.getElementById('tiefeDetails');
+        
+        const rueckenCard = document.getElementById('resultRueckenCard');
+        const rueckenIcon = document.getElementById('rueckenIcon');
+        const rueckenStatus = document.getElementById('rueckenStatus');
+        const rueckenDetails = document.getElementById('rueckenDetails');
+        
+        const API_URL = 'http://127.0.0.1:5001/analyse'; 
+
+        analyseButton.addEventListener('click', async () => {
+            const file = videoInput.files[0];
+            if (!file) {
+                showError('Bitte wähle zuerst eine Videodatei aus.');
+                return;
+            }
+
+            // UI für Ladezustand zurücksetzen und anzeigen
+            analyseButton.disabled = true;
+            loadingSpinner.style.display = 'block';
+            errorDisplay.style.display = 'none';
+            resultContainer.style.display = 'none';
+            rawJsonArea.textContent = 'Analysiere...';
+
+            const formData = new FormData();
+            formData.append('video', file);
+
+            try {
+                const response = await fetch(API_URL, { method: 'POST', body: formData });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Ein unbekannter API-Fehler ist aufgetreten.');
+                }
+
+                // Lade-UI ausblenden und Ergebnisse anzeigen
+                loadingSpinner.style.display = 'none';
+                resultContainer.style.display = 'grid';
+                displayResults(data);
+
+            } catch (error) {
+                showError(`Fehler: ${error.message}\nStelle sicher, dass der 'app.py' Server läuft.`);
+            } finally {
+                analyseButton.disabled = false;
+            }
+        });
+
+        function displayResults(data) {
+            // Rohes JSON für Debugging anzeigen
+            rawJsonArea.textContent = JSON.stringify(data, null, 2);
+
+            // TIEFE-KARTE AKTUALISIEREN
+            updateCard(tiefeCard, tiefeIcon, tiefeStatus, tiefeDetails, 
+                data.bewertung_tiefe, 
+                {
+                    "Gut": { icon: '✅', text: 'Gut!', details: 'Deine Hüfte war unterhalb des Knies.', class: 'status-good' },
+                    "Zu hoch": { icon: '❌', text: 'Zu hoch', details: 'Versuche, deine Hüfte unterhalb deiner Knie zu bringen.', class: 'status-bad' },
+                    "Nicht analysiert": { icon: '⚠️', text: 'N/A', details: data.debug_info?.depth_error || 'Konnte nicht analysiert werden.', class: 'status-neutral' }
+                }
+            );
+            
+            // RÜCKEN-KARTE AKTUALISIEREN
+            updateCard(rueckenCard, rueckenIcon, rueckenStatus, rueckenDetails,
+                data.bewertung_ruecken,
+                {
+                    "Gut": { icon: '✅', text: 'Gut!', details: 'Dein Oberkörper war aufrecht.', class: 'status-good' },
+                    "Vorgebeugt": { icon: '❌', text: 'Vorgebeugt', details: `Dein Oberkörper war zu stark nach vorne geneigt.`, class: 'status-bad' },
+                    "Nicht analysiert": { icon: '⚠️', text: 'N/A', details: 'Konnte nicht analysiert werden.', class: 'status-neutral' }
+                }
+            );
+        }
+
+        function updateCard(card, iconEl, statusEl, detailsEl, status, config) {
+            const { icon, text, details, class: statusClass } = config[status] || config["Nicht analysiert"];
+            card.className = `result-card ${statusClass}`;
+            iconEl.textContent = icon;
+            statusEl.textContent = text;
+            detailsEl.textContent = details;
+        }
+
+        function showError(message) {
+            loadingSpinner.style.display = 'none';
+            errorDisplay.textContent = message;
+            errorDisplay.style.display = 'block';
+            resultContainer.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
